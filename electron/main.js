@@ -1093,7 +1093,20 @@ ipcMain.handle('save-punches', async (event, {
   year,
   month,
   newPunches = [],
+  importOnly = false,
 } = {}) => {
+  if (importOnly) {
+    try {
+      if (!pin) throw new Error('Employee PIN/ID is required.');
+      const { importMissingDays } = require('./attendanceImport');
+      const result = importMissingDays(db, { pin, registryNumber, staffNoOnDev, newPunches });
+      saveDbToDisk();
+      return result;
+    } catch (err) {
+      console.error('Failed to import punches:', err);
+      return { success: false, error: err.message };
+    }
+  }
   try {
     if (!pin) {
       return { success: false, error: 'Employee PIN/ID is required.' };

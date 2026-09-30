@@ -267,6 +267,7 @@ export default function AttendancePage({
 
       const boundEmployees = employees.filter((e) => e.fprintAssigned);
       let totalSavedPunches = 0;
+      let totalSkippedPunches = 0;
       let matchedEmpCount = 0;
 
       for (const emp of boundEmployees) {
@@ -293,14 +294,21 @@ export default function AttendancePage({
             rawTime: p.raw,
           }));
 
-          await window.dtrApi?.savePunches({
+          const saved = await window.dtrApi.savePunches({
             pin: String(savePin),
+            registryNumber: emp.registryNumber,
+            staffNoOnDev: emp.staffNoOnDev,
+            importOnly: true,
             year: y,
             month: m,
             newPunches,
           });
 
-          totalSavedPunches += newPunches.length;
+          if (!saved?.success) {
+            throw new Error(saved?.error || "Could not save attendance records.");
+          }
+          totalSavedPunches += saved.inserted;
+          totalSkippedPunches += saved.skipped;
         }
       }
 
@@ -309,7 +317,7 @@ export default function AttendancePage({
 
       setImportStatus({
         type: totalSavedPunches > 0 ? "success" : "warning",
-        message: `Processed ${parsedLogs.length} total raw logs. Successfully saved ${totalSavedPunches} punch records for ${matchedEmpCount} linked employee(s).`,
+        message: `Processed ${parsedLogs.length} raw logs for ${matchedEmpCount} linked employee(s). Added ${totalSavedPunches} punches on missing dates. Skipped ${totalSkippedPunches} punches on dates with existing attendance or duplicate entries. Existing attendance was preserved.`,
       });
     } catch (err) {
       console.error("Attendance Download Error:", err);

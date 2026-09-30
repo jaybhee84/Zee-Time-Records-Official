@@ -8,6 +8,7 @@ import {
   Database,
   User,
   Clock,
+  FilePenLine,
 } from "lucide-react";
 import sdoLogo from "../assets/sdo.png";
 import swabeLogo from "../assets/swabe.png";
@@ -15,6 +16,7 @@ import swabeLogo from "../assets/swabe.png";
 const NAV_ITEMS = [
   { key: "employees", label: "Employees", icon: Users },
   { key: "attendance", label: "Attendance / DTR", icon: ScanLine },
+  { key: "reportPreparation", label: "Edit Records", icon: FilePenLine },
   { key: "officialTime", label: "Official Time", icon: Clock },
   { key: "printDtr", label: "Print DTR", icon: Printer },
   { key: "backup", label: "Backup & Restore", icon: Database },
