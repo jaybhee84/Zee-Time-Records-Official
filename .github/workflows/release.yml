@@ -46,10 +46,11 @@ jobs:
         id: existing
         shell: pwsh
         env:
-          GH_TOKEN: ${{ secrets.GH_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
           RELEASE_TAG: ${{ steps.version.outputs.tag }}
         run: |
-          gh release view $env:RELEASE_TAG --repo buzzjay84/zee-time-records 2>$null
+          gh release view $env:RELEASE_TAG --repo $env:GH_REPO 2>$null
 
           if ($LASTEXITCODE -eq 0) {
             Write-Host "Release $env:RELEASE_TAG already exists."
@@ -78,12 +79,13 @@ jobs:
           Write-Host "Generated release files:"
           Get-ChildItem -Path release -Recurse
 
-      - name: Create GitHub Release in buzzjay84/zee-time-records
+      - name: Create GitHub Release in this repository
         if: steps.existing.outputs.exists != 'true'
         uses: softprops/action-gh-release@v2
         with:
-          repository: buzzjay84/zee-time-records
-          token: ${{ secrets.GH_TOKEN }}
+          repository: ${{ github.repository }}
+          token: ${{ github.token }}
+          target_commitish: ${{ github.sha }}
           tag_name: ${{ steps.version.outputs.tag }}
           name: Zee Time Records ${{ steps.version.outputs.version }}
           body: Zee Time Records v${{ steps.version.outputs.version }}
