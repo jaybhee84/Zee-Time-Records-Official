@@ -41,22 +41,11 @@ export const isImportedGroupValue = (value = "") =>
 export const getImportedGroupName = (value = "") =>
   isImportedGroupValue(value) ? String(value).slice("imported:".length) : "";
 
-export function getGroupOptions(employees = []) {
-  const options = [
+export function getGroupOptions() {
+  return [
     { value: "teaching", label: "Teaching" },
     { value: "non-teaching", label: "Non-Teaching" },
   ];
-  const seen = new Set(options.map((option) => normalize(option.label)));
-
-  for (const employee of Array.isArray(employees) ? employees : []) {
-    const groupName = String(employee?.sourceGroup || "").trim();
-    const key = normalize(groupName);
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    options.push({ value: importedGroupValue(groupName), label: groupName });
-  }
-
-  return options;
 }
 
 export function employeeMatchesGroup(employee, value) {

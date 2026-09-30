@@ -29,7 +29,6 @@ import {
 // (e.g. "Subject Teacher" also catches "Subject Teacher - Math", SNED/SPED
 // are treated as the same bucket).
 const resolveGroup = (e) => {
-  if (e.sourceGroup?.trim()) return e.sourceGroup.trim();
   return isTeachingSubgroup(e.subGroup) ? "Teaching" : "Non-Teaching";
 };
 

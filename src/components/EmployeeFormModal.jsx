@@ -1,23 +1,15 @@
 import React, { useState } from "react";
 import { X } from "lucide-react";
+import {
+  TEACHING_SUBGROUPS,
+  NON_TEACHING_SUBGROUPS,
+  isTeachingSubgroup,
+} from "../utils/employeeGroups.js";
 
 const GROUPS = ["Teaching", "Nonteaching"];
 
-// Dynamic Sub-Group lists
-const TEACHING_SUBGROUPS = [
-  "Kinder",
-  "Grade 1",
-  "Grade 2",
-  "Grade 3",
-  "Grade 4",
-  "Grade 5",
-  "Grade 6",
-  "SPED",
-  "Departmental",
-  "Subject Teachers",
-];
-
-const NON_TEACHING_SUBGROUPS = ["Admin", "Job Order"];
+const resolveFormGroup = (employee) =>
+  isTeachingSubgroup(employee.subGroup) ? "Teaching" : "Nonteaching";
 
 const getSubGroups = (group) =>
   group === "Nonteaching" ? NON_TEACHING_SUBGROUPS : TEACHING_SUBGROUPS;
@@ -42,6 +34,7 @@ export default function EmployeeFormModal({
     const base = initial || emptyForm;
     return {
       ...base,
+      group: resolveFormGroup(base),
       familyName: base.familyName?.toUpperCase() || "",
       firstName: base.firstName?.toUpperCase() || "",
       middleInitial: base.middleInitial?.toUpperCase() || "",
@@ -51,12 +44,12 @@ export default function EmployeeFormModal({
   // Track whether "Custom" sub-group mode is active & track custom value
   const [isCustomSubGroup, setIsCustomSubGroup] = useState(() => {
     if (!initial) return false;
-    const currentSubGroups = getSubGroups(initial.group);
+    const currentSubGroups = getSubGroups(resolveFormGroup(initial));
     return !currentSubGroups.includes(initial.subGroup);
   });
   const [customSubGroup, setCustomSubGroup] = useState(() => {
     if (!initial) return "";
-    const currentSubGroups = getSubGroups(initial.group);
+    const currentSubGroups = getSubGroups(resolveFormGroup(initial));
     return !currentSubGroups.includes(initial.subGroup) ? initial.subGroup : "";
   });
 

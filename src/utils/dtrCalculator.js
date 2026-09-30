@@ -238,7 +238,13 @@ export function buildMonthlyDTR(punches, year, month, noonStartHour = 12, schedu
     const sorted = (byDay[day] || []).sort((a, b) => a.datetime - b.datetime);
     const taps   = deduplicatePunches(sorted, 60);
 
-    const { amArrival, amDeparture, pmArrival, pmDeparture } = assignSlots(taps);
+    // Vinea's report fills columns chronologically, including incomplete days.
+    // Keep that layout for imported history; device logs retain our slot rules.
+    const slots = taps.length > 0 && taps.every(p => p.source === 'vinea')
+      ? Object.fromEntries(['amArrival', 'amDeparture', 'pmArrival', 'pmDeparture']
+          .map((slot, index) => [slot, taps[index]?.datetime ?? null]))
+      : assignSlots(taps);
+    const { amArrival, amDeparture, pmArrival, pmDeparture } = slots;
 
     const row = {
       day,

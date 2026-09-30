@@ -778,59 +778,15 @@ function importVineaPunches(reader) {
     return { punchesImported: 0, punchesSkipped: 0, punchesTableFound: false };
   }
 
-  const dtrRows = reader.getTable('DTR').getData();
-
-  const existing = new Set();
-  getAll('SELECT pin, timestamp FROM punches').forEach((r) => {
-    existing.add(`${r.pin}|${r.timestamp}`);
+  const { importRows } = require('./vineaImport');
+  let repairBackupPath;
+  const result = importRows(db, reader.getTable('DTR').getData(), () => {
+    repairBackupPath = `${dbPath}.before-vinea-repair-${Date.now()}.db`;
+    // Copy the persisted database before changing any existing punches.
+    fs.copyFileSync(dbPath, repairBackupPath);
   });
-
-  const insertStmt = db.prepare(
-    'INSERT INTO punches (pin, staffNoOnDev, timestamp, rawTime) VALUES (?, ?, ?, ?)',
-  );
-
-  let punchesImported = 0;
-  let punchesSkipped = 0;
-
-  for (const row of dtrRows) {
-    const pin = String(row.EmployeeID || '').trim();
-    const dateVal = row.Date;
-    const timeVal = row.Time;
-
-    if (!pin || !(dateVal instanceof Date) || !(timeVal instanceof Date)) {
-      punchesSkipped++;
-      continue;
-    }
-
-    const yyyy = dateVal.getFullYear();
-    const mm = String(dateVal.getMonth() + 1).padStart(2, '0');
-    const dd = String(dateVal.getDate()).padStart(2, '0');
-
-    const hh24 = timeVal.getHours();
-    const min = String(timeVal.getMinutes()).padStart(2, '0');
-    const sec = String(timeVal.getSeconds()).padStart(2, '0');
-
-    const timestamp = `${yyyy}-${mm}-${dd} ${String(hh24).padStart(2, '0')}:${min}:${sec}`;
-    const key = `${pin}|${timestamp}`;
-    if (existing.has(key)) {
-      punchesSkipped++;
-      continue;
-    }
-    existing.add(key);
-
-    let hh12 = hh24 % 12;
-    if (hh12 === 0) hh12 = 12;
-    const meridiem = hh24 >= 12 ? 'PM' : 'AM';
-    const rawTime = `${hh12}:${min} ${meridiem}`;
-
-    insertStmt.run([pin, pin, timestamp, rawTime]);
-    punchesImported++;
-  }
-
-  insertStmt.free();
   saveDbToDisk();
-
-  return { punchesImported, punchesSkipped, punchesTableFound: true };
+  return { ...result, repairBackupPath };
 }
 
 ipcMain.handle('import-vinea-employees', async () => {

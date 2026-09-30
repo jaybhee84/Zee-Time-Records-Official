@@ -323,6 +323,9 @@ export default function BackupView({ employees = [], setEmployees }) {
       setEmployees(Array.from(byRegistryNumber.values()));
 
       const notes = [];
+      if (res.punchesRepaired > 0) {
+        notes.push(`${res.punchesRepaired} incorrect timestamps repaired; previous database saved to ${res.repairBackupPath}`);
+      }
       if (res.skippedCount > 0) {
         notes.push(
           `${res.skippedCount} employee row(s) skipped (no employee ID)`,
