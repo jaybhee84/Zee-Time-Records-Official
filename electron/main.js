@@ -857,11 +857,10 @@ ipcMain.handle('import-vinea-employees', async () => {
 });
 
 // Writes a VDI BioOffice (Vinea) backup that mirrors this app's employees and
-// attendance. VDI's own database supplies everything else (company setup,
-// schedules, users, reports) and is only ever read, never modified.
+// attendance using the bundled VDI database template.
 ipcMain.handle('export-vdi-backup', async () => {
   try {
-    const { VDI_INSTALLED_DB, defaultBackupName, exportVdiBackup } = require('./vdiExport');
+    const { VDI_TEMPLATE_PATH, defaultBackupName, exportVdiBackup } = require('./vdiExport');
     if (process.platform !== 'win32') {
       return { success: false, error: 'Exporting a VDI backup is only available on Windows.' };
     }
@@ -872,26 +871,18 @@ ipcMain.handle('export-vdi-backup', async () => {
       return { success: false, error: 'There are no attendance records to export yet.' };
     }
 
-    let basePath = VDI_INSTALLED_DB;
-    if (!fs.existsSync(basePath)) {
-      const openResult = await dialog.showOpenDialog(mainWindow, {
-        title: 'VDI is not installed here - select your latest VDI backup to build on',
-        filters: [{ name: 'VDI Backup', extensions: ['zip', 'mdb'] }],
-        properties: ['openFile'],
-      });
-      if (openResult.canceled || openResult.filePaths.length === 0) return { canceled: true };
-      basePath = openResult.filePaths[0];
-    }
+    const basePath = VDI_TEMPLATE_PATH;
 
     const saveResult = await dialog.showSaveDialog(mainWindow, {
       title: 'Export VDI Backup',
+      buttonLabel: 'Export',
       defaultPath: path.join(app.getPath('desktop'), defaultBackupName()),
       filters: [
         { name: 'VDI Backup', extensions: ['zip'] },
-        { name: 'Access Database', extensions: ['mdb'] },
       ],
     });
     if (saveResult.canceled || !saveResult.filePath) return { canceled: true };
+    if (!/\.zip$/i.test(saveResult.filePath)) saveResult.filePath += '.zip';
     if (path.resolve(saveResult.filePath).toLowerCase() === path.resolve(basePath).toLowerCase()) {
       return { success: false, error: 'Choose a different file name - the export cannot overwrite the VDI database it is built from.' };
     }

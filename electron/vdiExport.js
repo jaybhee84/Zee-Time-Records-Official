@@ -9,6 +9,7 @@ const { mapVineaDepartmentToSubgroup } = require('./vineaImport');
 // ("10 9 26.zip") holding the whole Access database under this name.
 const VDI_DB_NAME = 'MSEEDBioOfficedb.mdb';
 const VDI_INSTALLED_DB = path.join('C:\\MSEEDBioOffice', VDI_DB_NAME);
+const VDI_TEMPLATE_PATH = path.join(__dirname, 'assets', 'vdi-template.zip');
 
 const normalizeIdentifier = (value) => {
   const trimmed = String(value ?? '').trim();
@@ -419,11 +420,12 @@ function runJet(workDir, mdbPath, outPath) {
 }
 
 /**
- * Builds a VDI BioOffice backup from `basePath` (the installed database or a
- * previous backup, never modified) with this app's employees and attendance.
+ * Builds a VDI BioOffice backup from the bundled template (or an explicit
+ * basePath, never modified) with this app's employees and attendance.
  */
-async function exportVdiBackup({ basePath, outPath, employees, punches, MDBReader }) {
+async function exportVdiBackup({ basePath = VDI_TEMPLATE_PATH, outPath, employees, punches, MDBReader }) {
   if (process.platform !== 'win32') throw new Error('Exporting a VDI backup is only available on Windows.');
+  if (!/\.zip$/i.test(outPath)) throw new Error('VDI backups must be exported as a .zip file.');
   const baseBuffer = readBaseFile(basePath);
   const plan = planVdiExport({ employees, punches, base: readBase(new MDBReader(baseBuffer)) });
 
@@ -438,7 +440,7 @@ async function exportVdiBackup({ basePath, outPath, employees, punches, MDBReade
       throw new Error(`Only ${written} of ${plan.dtr.length} attendance records were written. Nothing was exported.`);
     }
     const mdb = fs.readFileSync(compactedPath);
-    fs.writeFileSync(outPath, /\.mdb$/i.test(outPath) ? mdb : createZip(VDI_DB_NAME, mdb));
+    fs.writeFileSync(outPath, createZip(VDI_DB_NAME, mdb));
     return plan.stats;
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
@@ -448,6 +450,7 @@ async function exportVdiBackup({ basePath, outPath, employees, punches, MDBReade
 module.exports = {
   VDI_DB_NAME,
   VDI_INSTALLED_DB,
+  VDI_TEMPLATE_PATH,
   defaultBackupName,
   readBase,
   planVdiExport,

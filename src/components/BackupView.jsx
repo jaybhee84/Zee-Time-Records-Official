@@ -542,7 +542,10 @@ export default function BackupView({ employees = [], setEmployees }) {
                 lineHeight: "1.5",
               }}
             >
-              Create a VDI BioOffice backup with your employees and attendance.
+              Create a ZIP containing the Microsoft Access database
+              (MSEEDBioOfficedb.mdb) with your employees and attendance.
+              Choose where to save your export; the app generates the database
+              automatically using its built-in VDI template.
               Time edits made here overwrite VDI when the backup is restored.
             </p>
           </div>
