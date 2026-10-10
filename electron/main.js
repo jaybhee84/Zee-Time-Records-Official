@@ -6,31 +6,7 @@ const os = require('os');
 const crypto = require('crypto');
 const initSqlJs = require('sql.js');
 
-const VINEA_DEPARTMENT_TO_SUBGROUP = {
-  'GRADE 1 TCHR.': 'Grade 1',
-  'GRADE 2 TCHR.': 'Grade 2',
-  'GRADE 3 TCHR.': 'Grade 3',
-  'GRADE 4 TCHR.': 'Grade 4',
-  'GRADE 5 TCHR.': 'Grade 5',
-  'GRADE 6 TCHR.': 'Grade 6',
-  'KINDER TCHR.': 'Kinder',
-  'DEPT. TEACHER': 'Departmental',
-  'SNC SPED TEACHER': 'SNED',
-  'SUBSTITUTE TEACHER': 'Substitute Teacher',
-  'ALIVECONTRL.': 'Alive',
-  'ADMIN': 'Admin',
-  'JOB ORDER': 'Job Order',
-  'NLC VOLUNTEERS': 'Subject Teacher',
-};
-
-function mapVineaDepartmentToSubgroup(rawDept) {
-  const normalized = (rawDept || '').trim().toUpperCase();
-  const mapped = VINEA_DEPARTMENT_TO_SUBGROUP[normalized];
-  return {
-    subGroup: mapped || (rawDept || '').trim(),
-    wasMapped: Boolean(mapped),
-  };
-}
+const { mapVineaDepartmentToSubgroup } = require('./vineaImport');
 
 app.disableHardwareAcceleration();
 
@@ -66,8 +42,27 @@ function notifyAndInstallUpdate(info = downloadedUpdateInfo) {
   }
 
   // Give the user enough time to read the notification, then install without
-  // requiring a confirmation click. The second argument reopens the app.
-  setTimeout(() => autoUpdater.quitAndInstall(false, true), 6000);
+  // requiring a confirmation click. Silent mode skips the installer wizard;
+  // the second argument reopens the app once the update is in place.
+  setTimeout(() => autoUpdater.quitAndInstall(true, true), 6000);
+}
+
+// Automatic checks fail without any dialog, so keep a small log next to the
+// database to make a stuck update diagnosable.
+function createUpdateLogger() {
+  const logPath = path.join(app.getPath('userData'), 'updater.log');
+  const write = (level) => (message) => {
+    try {
+      if (fs.existsSync(logPath) && fs.statSync(logPath).size > 512 * 1024) {
+        fs.writeFileSync(logPath, '');
+      }
+      const text = message instanceof Error ? message.stack || message.message : String(message);
+      fs.appendFileSync(logPath, `${new Date().toISOString()} [${level}] ${text}\n`);
+    } catch {
+      // Logging must never interfere with the update itself.
+    }
+  };
+  return { info: write('info'), warn: write('warn'), error: write('error'), debug: () => {} };
 }
 
 async function checkForUpdates({ manual = false } = {}) {
@@ -162,6 +157,8 @@ function scheduleAutomaticUpdateCheck(delay = AUTO_UPDATE_CHECK_INTERVAL_MS) {
 }
 
 function configureAutoUpdater() {
+  autoUpdater.logger = createUpdateLogger();
+
   autoUpdater.on('update-available', () => {
     updateCheckInProgress = false;
     updateDownloadInProgress = true;
@@ -855,6 +852,61 @@ ipcMain.handle('import-vinea-employees', async () => {
     };
   } catch (err) {
     console.error('Failed to import Vinea employees:', err);
+    return { success: false, error: err.message };
+  }
+});
+
+// Writes a VDI BioOffice (Vinea) backup that mirrors this app's employees and
+// attendance. VDI's own database supplies everything else (company setup,
+// schedules, users, reports) and is only ever read, never modified.
+ipcMain.handle('export-vdi-backup', async () => {
+  try {
+    const { VDI_INSTALLED_DB, defaultBackupName, exportVdiBackup } = require('./vdiExport');
+    if (process.platform !== 'win32') {
+      return { success: false, error: 'Exporting a VDI backup is only available on Windows.' };
+    }
+
+    const employees = getAll('SELECT * FROM employees');
+    const punches = getAll('SELECT pin, staffNoOnDev, timestamp FROM punches');
+    if (punches.length === 0) {
+      return { success: false, error: 'There are no attendance records to export yet.' };
+    }
+
+    let basePath = VDI_INSTALLED_DB;
+    if (!fs.existsSync(basePath)) {
+      const openResult = await dialog.showOpenDialog(mainWindow, {
+        title: 'VDI is not installed here - select your latest VDI backup to build on',
+        filters: [{ name: 'VDI Backup', extensions: ['zip', 'mdb'] }],
+        properties: ['openFile'],
+      });
+      if (openResult.canceled || openResult.filePaths.length === 0) return { canceled: true };
+      basePath = openResult.filePaths[0];
+    }
+
+    const saveResult = await dialog.showSaveDialog(mainWindow, {
+      title: 'Export VDI Backup',
+      defaultPath: path.join(app.getPath('desktop'), defaultBackupName()),
+      filters: [
+        { name: 'VDI Backup', extensions: ['zip'] },
+        { name: 'Access Database', extensions: ['mdb'] },
+      ],
+    });
+    if (saveResult.canceled || !saveResult.filePath) return { canceled: true };
+    if (path.resolve(saveResult.filePath).toLowerCase() === path.resolve(basePath).toLowerCase()) {
+      return { success: false, error: 'Choose a different file name - the export cannot overwrite the VDI database it is built from.' };
+    }
+
+    const { default: MDBReader } = await import('mdb-reader');
+    const stats = await exportVdiBackup({
+      basePath,
+      outPath: saveResult.filePath,
+      employees,
+      punches,
+      MDBReader,
+    });
+    return { success: true, filePath: saveResult.filePath, basePath, ...stats };
+  } catch (err) {
+    console.error('Failed to export VDI backup:', err);
     return { success: false, error: err.message };
   }
 });

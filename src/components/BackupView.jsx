@@ -5,6 +5,7 @@ import {
   CheckCircle,
   AlertCircle,
   Users,
+  Database,
   X,
 } from "lucide-react";
 
@@ -159,6 +160,7 @@ export default function BackupView({ employees = [], setEmployees }) {
   const [status, setStatus] = useState(null);
   const [importing, setImporting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
+  const [exportingVdi, setExportingVdi] = useState(false);
   const handleImportVinea = async () => {
     setImporting(true);
     try {
@@ -238,6 +240,60 @@ export default function BackupView({ employees = [], setEmployees }) {
       setStatus({ type: "error", msg: `Import failed: ${err.message}` });
     } finally {
       setImporting(false);
+    }
+  };
+
+  const handleExportVdi = async () => {
+    setExportingVdi(true);
+    try {
+      const res = await window.dtrApi.exportVdiBackup();
+      if (res.canceled) return;
+      if (!res.success) {
+        setStatus({
+          type: "error",
+          msg: `VDI export failed: ${res.error || "unknown error"}`,
+        });
+        return;
+      }
+
+      const notes = [];
+      if (res.recordsAdded > 0 || res.recordsRemoved > 0) {
+        notes.push(
+          `${res.recordsAdded} added and ${res.recordsRemoved} replaced/removed compared with VDI`,
+        );
+      }
+      if (res.employeesAdded > 0 || res.employeesUpdated > 0) {
+        notes.push(
+          `${res.employeesAdded} employee(s) added, ${res.employeesUpdated} updated`,
+        );
+      }
+      if (res.recordsKeptFromVdi > 0) {
+        notes.push(
+          `${res.recordsKeptFromVdi} older VDI record(s) kept for months not in Zee Time Records`,
+        );
+      }
+      if (res.unmatchedPunches > 0) {
+        notes.push(
+          `${res.unmatchedPunches} record(s) skipped — no employee has ID ${res.unmatchedPins.join(", ")}`,
+        );
+      }
+      if (res.employeesSkipped?.length > 0) {
+        notes.push(
+          `employee ID too long for VDI, skipped: ${res.employeesSkipped.join(", ")}`,
+        );
+      }
+
+      setStatus({
+        type: "success",
+        msg: `VDI backup saved to ${res.filePath} with ${res.records} attendance record(s).${
+          notes.length ? " " + notes.join("; ") + "." : ""
+        } Restore it in VDI to apply.`,
+      });
+    } catch (err) {
+      console.error("VDI export error:", err);
+      setStatus({ type: "error", msg: `VDI export failed: ${err.message}` });
+    } finally {
+      setExportingVdi(false);
     }
   };
 
@@ -463,6 +519,47 @@ export default function BackupView({ employees = [], setEmployees }) {
           >
             <Users size={16} />
             <span>{importing ? "Importing…" : "Import Vinea Backup"}</span>
+          </button>
+        </div>
+
+        <div style={cardStyle}>
+          <div style={{ marginBottom: "16px" }}>
+            <h3
+              style={{
+                fontSize: "16px",
+                fontWeight: 600,
+                color: "#111827",
+                margin: 0,
+              }}
+            >
+              Export to VDI (.zip)
+            </h3>
+            <p
+              style={{
+                fontSize: "12px",
+                color: "#6b7280",
+                marginTop: "8px",
+                lineHeight: "1.5",
+              }}
+            >
+              Create a VDI BioOffice backup with your employees and attendance.
+              Time edits made here overwrite VDI when the backup is restored.
+            </p>
+          </div>
+          <button
+            onClick={handleExportVdi}
+            disabled={exportingVdi}
+            style={{
+              ...baseButtonStyle,
+              backgroundColor: "#4f46e5",
+              opacity: exportingVdi ? 0.5 : 1,
+              cursor: exportingVdi ? "not-allowed" : "pointer",
+            }}
+          >
+            <Database size={16} />
+            <span>
+              {exportingVdi ? "Exporting… please wait" : "Export VDI Backup"}
+            </span>
           </button>
         </div>
       </div>
