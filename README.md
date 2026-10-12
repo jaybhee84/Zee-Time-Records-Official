@@ -15,12 +15,6 @@ Plug that same drive into your PC and point the app at the file.
 
 ## Setup
 
-### Printer driver download
-
-[L1210, L3210, L3250, L3251, L3260, L5290 RAW driver 1.0.1.1 (ZIP)](https://drive.google.com/file/d/1jwPA_U34dLYmPQak-IhBUzMD0ZTZZJuq/view?usp=drive_link)
-
-### Development setup
-
 ```bash
 npm install
 npm run dev
