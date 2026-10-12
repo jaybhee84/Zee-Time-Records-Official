@@ -1,5 +1,9 @@
 const assert = require('node:assert/strict');
 const { test } = require('node:test');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const { exportVdiBackup } = require('../electron/vdiExport');
 const { planVdiExport, createZip, readZipEntry, defaultBackupName } = require('../electron/vdiExport');
 
 const baseRow = (id, date, time, Status, Dev = '001') => ({ EmployeeID: id, date, time, Status, Dev });
@@ -74,4 +78,33 @@ test('backup zip round-trips and is named like a VDI backup', () => {
   assert.deepEqual(readZipEntry(zip, (name) => name === 'MSEEDBioOfficedb.mdb'), data);
   assert.equal(readZipEntry(zip, (name) => name === 'other.mdb'), null);
   assert.equal(defaultBackupName(new Date(2026, 9, 9)), '10 9 26.zip');
+});
+
+test('export preserves blank middle names for VDI report concatenation, including updates', { skip: process.platform !== 'win32' }, async () => {
+  const MDBReader = (await import('mdb-reader')).default;
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'zee-vdi-name-test-'));
+  try {
+    const firstPath = path.join(work, 'first.zip');
+    const outPath = path.join(work, 'updated.zip');
+    const employees = [
+      employee('101', { familyName: 'AFUNDAR', firstName: 'EVELYN' }),
+      employee('102', { familyName: 'CRUZ', firstName: 'ANA', middleInitial: 'M.' }),
+    ];
+    const punches = employees.map(e => punch(e.registryNumber, '2026-09-03 07:00:00'));
+    await exportVdiBackup({ outPath: firstPath, employees, punches, MDBReader });
+    employees[1].middleInitial = '';
+    await exportVdiBackup({ basePath: firstPath, outPath, employees, punches, MDBReader });
+    const reader = new MDBReader(readZipEntry(fs.readFileSync(outPath), name => /\.mdb$/i.test(name)));
+    const rows = reader.getTable('Employees').getData();
+    assert.equal(rows.length, 2);
+    for (const emp of employees) {
+      const row = rows.find(r => r.EmployeeID === emp.registryNumber);
+      assert.equal(row.Lastname, emp.familyName);
+      assert.equal(row.Firstname, emp.firstName);
+      assert.equal(row.Middlename, '');
+    }
+    assert.equal(reader.getTable('DTR').getData().length, 2);
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
 });

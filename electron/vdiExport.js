@@ -331,13 +331,18 @@ try {
   }
   if (-not $cn) { throw "Could not open the database with the Windows Access engine: $openError" }
 
-  function Invoke-Sql([string]$Sql, [object[]]$Values = @()) {
+  function Invoke-Sql([string]$Sql, [object[]]$Values = @(), [int[]]$BlankTextIndexes = @()) {
     $cmd = $cn.CreateCommand()
     $cmd.CommandText = $Sql
     $cmd.CommandTimeout = 0
-    foreach ($value in $Values) {
+    for ($i = 0; $i -lt $Values.Count; $i++) {
+      $value = $Values[$i]
       $p = $cmd.Parameters.Add('p', [System.Data.OleDb.OleDbType]::VarWChar)
-      if ($null -eq $value -or "$value" -eq '') { $p.Value = [DBNull]::Value } else { $p.Value = "$value" }
+      # VDI concatenates name fields in reports. A NULL middle name makes
+      # the entire name NULL, so preserve blank text as a zero-length string.
+      if ($BlankTextIndexes -contains $i) { $p.Value = [string]$value }
+      elseif ($null -eq $value -or "$value" -eq '') { $p.Value = [DBNull]::Value }
+      else { $p.Value = "$value" }
     }
     $count = $cmd.ExecuteNonQuery()
     $cmd.Dispose()
@@ -350,10 +355,10 @@ try {
   foreach ($e in @($plan.inserts)) {
     [void](Invoke-Sql ('INSERT INTO [Employees] ([EmployeeID],[Lastname],[Firstname],[Middlename],[Department],[StaffNumber],[ScheduleCode],' +
       '[CurrentAddress],[ProvincialAddress],[Position],[PicturePath],[DeviceName],[IsActive],[MultiStaffID],[IsAssigned],[StartDate]) ' +
-      "VALUES (?,?,?,?,?,?,?,'','','','','',True,False,True,Date())") @($e.EmployeeID, $e.Lastname, $e.Firstname, $e.Middlename, $e.Department, $e.StaffNumber, $e.ScheduleCode))
+      "VALUES (?,?,?,?,?,?,?,'','','','','',True,False,True,Date())") @($e.EmployeeID, $e.Lastname, $e.Firstname, $e.Middlename, $e.Department, $e.StaffNumber, $e.ScheduleCode) @(1, 2, 3))
   }
   foreach ($e in @($plan.updates)) {
-    [void](Invoke-Sql 'UPDATE [Employees] SET [Lastname]=?,[Firstname]=?,[Middlename]=?,[Department]=?,[StaffNumber]=? WHERE [EmployeeID]=?' @($e.Lastname, $e.Firstname, $e.Middlename, $e.Department, $e.StaffNumber, $e.EmployeeID))
+    [void](Invoke-Sql 'UPDATE [Employees] SET [Lastname]=?,[Firstname]=?,[Middlename]=?,[Department]=?,[StaffNumber]=? WHERE [EmployeeID]=?' @($e.Lastname, $e.Firstname, $e.Middlename, $e.Department, $e.StaffNumber, $e.EmployeeID) @(0, 1, 2))
   }
 
   [void](Invoke-Sql 'DELETE FROM [DTR]')
