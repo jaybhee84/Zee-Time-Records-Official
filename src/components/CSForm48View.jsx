@@ -1,14 +1,16 @@
 import React from "react";
 import "./csForm48.css";
 
-// Converts a logged time value like "07:59 AM" to "07:59 am" — plain lowercase am/pm
+// Match the report's compact time notation, e.g. "07:59 AM" -> "7:59 am".
 function formatTimeCell(value) {
   if (!value) return "";
-  return String(value).replace(/\b(AM|PM)\b/i, (m) => m.toLowerCase());
+  return String(value)
+    .replace(/^0(?=\d:)/, "")
+    .replace(/\b(AM|PM)\b/i, (m) => m.toLowerCase());
 }
 
 // Inline width override for the Day/Date column
-const DAY_COLUMN_WIDTH = "16%";
+const DAY_COLUMN_WIDTH = "var(--col-day)";
 
 // Single CS Form 48 Card Layout
 export function CSForm48Card({

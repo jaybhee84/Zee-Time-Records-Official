@@ -10,6 +10,7 @@ export default function DTRPdfPreview({ url, printers, printer, onPrinter, paper
   const [copies, setCopies] = useState(1);
   const [pages, setPages] = useState('');
   const [monochrome, setMonochrome] = useState(false);
+  const [scale, setScale] = useState('noscale');
   const canvas = useRef(null);
   const stage = useRef(null);
   const preview = useRef(null);
@@ -90,10 +91,10 @@ export default function DTRPdfPreview({ url, printers, printer, onPrinter, paper
       <label>Pages<input placeholder="All pages, or 1-3,5" value={pages} onChange={e => setPages(e.target.value)} /></label>
       {!validPages && <p role="alert">Enter valid page numbers from 1 to {doc?.numPages || 0}.</p>}
       <label>Paper size<input readOnly value={paperSize === 'FOLIO' ? 'Folio (8.5 × 13 in)' : 'A4'} /></label>
-      <label>Scale<input readOnly value="100% — actual PDF size" /></label>
+      <label>Scale<select value={scale} onChange={e => setScale(e.target.value)}><option value="shrink">Shrink to printable area</option><option value="noscale">Actual size (100%)</option></select></label>
       <label>Color<select value={monochrome ? 'mono' : 'color'} onChange={e => setMonochrome(e.target.value === 'mono')}><option value="color">Color</option><option value="mono">Grayscale</option></select></label>
-      <p>The preview uses the generated PDF, including its margins and table spacing.</p>
-      <button className="btn-primary-modern" disabled={!doc || !!error || !validPages || printing || !printers.length} onClick={() => onPrint({ copies, pages: pages.trim() || undefined, monochrome })}>{printing ? 'Printing…' : 'Print'}</button>
+      <p>The preview shows the PDF. Shrink to printable area reduces the printed size when needed to avoid clipped edges. Actual size requires margins your printer supports.</p>
+      <button className="btn-primary-modern" disabled={!doc || !!error || !validPages || printing || !printers.length} onClick={() => onPrint({ copies, pages: pages.trim() || undefined, monochrome, scale })}>{printing ? 'Printing…' : 'Print'}</button>
     </aside>
     <section className="dtr-pdf-panel">
       <div className="dtr-pdf-toolbar">

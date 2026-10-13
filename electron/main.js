@@ -1300,7 +1300,8 @@ function buildDtrPdfOptions(paperSize = 'A4') {
     printBackground: true,
     pageSize: resolvePaperSize(paperSize).pdfPageSize,
     landscape: false,
-    margins: { top: 0, bottom: 0, left: 0, right: 0 },
+    // VDI report margin: 168 twips / 1440 twips per inch.
+    margins: { top: 168 / 1440, bottom: 168 / 1440, left: 168 / 1440, right: 168 / 1440 },
   };
 }
 
@@ -1392,11 +1393,11 @@ function printPdfFile(pdfPath, deviceName, paperSize = 'A4', printSettings = {})
 
     if (process.platform === 'win32') {
       const { print } = require('pdf-to-printer');
-      // Preserve the PDF dimensions rather than fitting it to printable margins.
+      // Preserve the PDF layout unless the user explicitly requests shrinking.
       print(pdfPath, {
         printer: deviceName || undefined,
         silent: true,
-        scale: 'noscale',
+        scale: printSettings.scale === 'shrink' ? 'shrink' : 'noscale',
         paperSize: paperSize === 'FOLIO' ? 'folio' : 'A4',
         copies: Math.max(1, Math.min(99, Number(printSettings.copies) || 1)),
         pages: printSettings.pages || undefined,
@@ -1407,7 +1408,7 @@ function printPdfFile(pdfPath, deviceName, paperSize = 'A4', printSettings = {})
       return;
     }
 
-    const args = ['-o', 'fit-to-page=false', '-n', String(Math.max(1, Math.min(99, Number(printSettings.copies) || 1)))];
+    const args = ['-o', `fit-to-page=${printSettings.scale === 'shrink'}`, '-n', String(Math.max(1, Math.min(99, Number(printSettings.copies) || 1)))];
     if (printSettings.pages) args.push('-o', `page-ranges=${printSettings.pages}`);
     args.push('-o', paperSize === 'FOLIO' ? 'media=Custom.8.5x13in' : 'media=A4');
     if (printSettings.monochrome) args.push('-o', 'ColorModel=Gray');
