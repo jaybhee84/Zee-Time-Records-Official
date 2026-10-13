@@ -403,15 +403,23 @@ body {
 .cs48-double-page {
     display: flex;
     flex-direction: row;
-    justify-content: space-between;
+    justify-content: flex-start;
     align-items: stretch;
     width: 100%;
-    gap: 4px;
+    gap: 0.05in;
+    padding-top: 0.1in;
+    padding-left: 0.15in;
+    padding-right: 0.3in;
+    box-sizing: border-box;
     background: #ffffff;
 }
 
 .cs48-double-page .cs48-card {
-    width: calc(50% - 4px);
+    /* Keep the table gap exact: horizontal card padding would widen it. */
+    flex: 1 1 0;
+    min-width: 0;
+    width: auto;
+    padding: 4px 0;
     max-width: none;
     box-sizing: border-box;
 }

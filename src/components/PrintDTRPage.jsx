@@ -34,6 +34,7 @@ import {
   isImportedGroupValue,
 } from "../utils/employeeGroups.js";
 import CSForm48View from "./CSForm48View.jsx";
+import DTRPdfPreview from "./DTRPdfPreview.jsx";
 
 const now = new Date();
 
@@ -284,9 +285,7 @@ export default function PrintDTRPage({ employees = [], punches = [] }) {
       const printerList = await window.dtrApi?.getPrinters?.();
       if (Array.isArray(printerList) && printerList.length > 0) {
         setPrinters(printerList);
-        const def =
-          printerList.find((p) => p.isDefault || p.status === "default") ||
-          printerList[0];
+        const def = printerList.find((p) => p.isDefault === true);
         setSelectedPrinter(def?.name || "");
       } else {
         setPrinters([]);
@@ -369,14 +368,14 @@ export default function PrintDTRPage({ employees = [], punches = [] }) {
     }
   };
 
-  const handleDirectPrint = async () => {
+  const handleDirectPrint = async (printSettings = {}) => {
     setPrinting(true);
     setPreviewError(null);
     setPrintSuccess(false);
     try {
       const result = await window.dtrApi?.printDtr?.(
         selectedPrinter,
-        buildPrintPayload(),
+        { ...buildPrintPayload(), printSettings },
       );
       if (result?.success) {
         setPrintSuccess(true);
@@ -676,7 +675,7 @@ export default function PrintDTRPage({ employees = [], punches = [] }) {
         .pdf-preview-modal {
           background: #ffffff;
           border-radius: 12px;
-          width: min(900px, 100%);
+          width: min(1200px, 100%);
           height: min(85vh, 900px);
           display: flex;
           flex-direction: column;
@@ -716,6 +715,7 @@ export default function PrintDTRPage({ employees = [], punches = [] }) {
 
         .pdf-preview-body {
           flex: 1;
+          min-height: 0;
           background: #f1f5f9;
           display: flex;
           align-items: stretch;
@@ -1246,10 +1246,14 @@ export default function PrintDTRPage({ employees = [], punches = [] }) {
               )}
 
               {!previewLoading && !previewError && previewBlobUrl && (
-                <iframe
-                  title="DTR PDF Preview"
-                  className="pdf-preview-frame"
-                  src={previewBlobUrl}
+                <DTRPdfPreview
+                  url={previewBlobUrl}
+                  printers={printers}
+                  printer={selectedPrinter}
+                  onPrinter={setSelectedPrinter}
+                  paperSize={buildPrintPayload().paperSize || "A4"}
+                  printing={printing}
+                  onPrint={handleDirectPrint}
                 />
               )}
             </div>
@@ -1260,57 +1264,6 @@ export default function PrintDTRPage({ employees = [], punches = [] }) {
               </div>
             )}
 
-            <div className="pdf-preview-footer">
-              <span className="pdf-preview-hint">
-                Pick a printer and hit Print to print directly, or use Save as
-                PDF / Open Externally for full OS print-preview controls.
-              </span>
-              <div className="pdf-preview-actions">
-                {printers.length > 0 && (
-                  <select
-                    className="printer-select"
-                    value={selectedPrinter}
-                    onChange={(e) => setSelectedPrinter(e.target.value)}
-                    disabled={previewLoading || printing}
-                    aria-label="Select printer"
-                  >
-                    {printers.map((p) => (
-                      <option key={p.name} value={p.name}>
-                        {p.displayName || p.name}
-                        {p.isDefault ? " (Default)" : ""}
-                      </option>
-                    ))}
-                  </select>
-                )}
-                <button
-                  className="btn-secondary-modern"
-                  onClick={handleSaveAsPdf}
-                  disabled={previewLoading || !!previewError || savingPdf}
-                >
-                  <Download size={16} /> {savingPdf ? "Saving…" : "Save as PDF"}
-                </button>
-                <button
-                  className="btn-secondary-modern"
-                  onClick={handleOpenAndPrint}
-                  disabled={previewLoading || !!previewError || openingExternal}
-                >
-                  <ExternalLink size={16} />{" "}
-                  {openingExternal ? "Opening…" : "Open Externally"}
-                </button>
-                <button
-                  className="btn-primary-modern"
-                  onClick={handleDirectPrint}
-                  disabled={
-                    previewLoading ||
-                    !!previewError ||
-                    printing ||
-                    printers.length === 0
-                  }
-                >
-                  <Printer size={16} /> {printing ? "Printing…" : "Print"}
-                </button>
-              </div>
-            </div>
           </div>
         </div>
       )}

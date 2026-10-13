@@ -1362,26 +1362,55 @@ ipcMain.handle('open-dtr-pdf-external', async (event, payload = {}) => {
 
 ipcMain.handle('get-printers', async () => {
   try {
-    return await mainWindow.webContents.getPrintersAsync();
+    const printers = await mainWindow.webContents.getPrintersAsync();
+    if (process.platform === 'win32') {
+      try {
+        const { getDefaultPrinter } = require('pdf-to-printer');
+        const defaultPrinter = await getDefaultPrinter();
+        if (defaultPrinter?.name) {
+          const normalizeName = value => String(value || '').trim().toLowerCase();
+          return printers.map(printer => ({
+            ...printer,
+            isDefault: normalizeName(printer.name) === normalizeName(defaultPrinter.name)
+              || normalizeName(printer.displayName) === normalizeName(defaultPrinter.name),
+          }));
+        }
+      } catch (err) {
+        console.warn('Could not resolve the Windows default printer:', err.message);
+      }
+    }
+    return printers;
   } catch (err) {
     console.error('Failed to get printer list:', err);
     return [];
   }
 });
 
-function printPdfFile(pdfPath, deviceName) {
+function printPdfFile(pdfPath, deviceName, paperSize = 'A4', printSettings = {}) {
   return new Promise((resolve, reject) => {
     const { execFile } = require('child_process');
 
     if (process.platform === 'win32') {
       const { print } = require('pdf-to-printer');
-      print(pdfPath, { printer: deviceName || undefined, silent: true })
+      // Preserve the PDF dimensions rather than fitting it to printable margins.
+      print(pdfPath, {
+        printer: deviceName || undefined,
+        silent: true,
+        scale: 'noscale',
+        paperSize: paperSize === 'FOLIO' ? 'folio' : 'A4',
+        copies: Math.max(1, Math.min(99, Number(printSettings.copies) || 1)),
+        pages: printSettings.pages || undefined,
+        monochrome: printSettings.monochrome === true,
+      })
         .then(resolve)
         .catch(reject);
       return;
     }
 
-    const args = ['-o', 'fit-to-page=false'];
+    const args = ['-o', 'fit-to-page=false', '-n', String(Math.max(1, Math.min(99, Number(printSettings.copies) || 1)))];
+    if (printSettings.pages) args.push('-o', `page-ranges=${printSettings.pages}`);
+    args.push('-o', paperSize === 'FOLIO' ? 'media=Custom.8.5x13in' : 'media=A4');
+    if (printSettings.monochrome) args.push('-o', 'ColorModel=Gray');
     if (deviceName) args.push('-d', deviceName);
     args.push(pdfPath);
     execFile('lp', args, { timeout: 30000 }, (err) => {
@@ -1392,7 +1421,7 @@ function printPdfFile(pdfPath, deviceName) {
 }
 
 ipcMain.handle('print-dtr', async (event, payload = {}) => {
-  const { employees, year, month, deviceName, paperSize = 'A4' } = payload;
+  const { employees, year, month, deviceName, paperSize = 'A4', printSettings = {} } = payload;
   let tmpPath;
   try {
     const pdfBuffer = await runPrintJob(
@@ -1402,7 +1431,7 @@ ipcMain.handle('print-dtr', async (event, payload = {}) => {
     );
     tmpPath = path.join(os.tmpdir(), `dtr-print-${Date.now()}.pdf`);
     fs.writeFileSync(tmpPath, pdfBuffer);
-    await printPdfFile(tmpPath, deviceName);
+    await printPdfFile(tmpPath, deviceName, paperSize, printSettings);
     return { success: true };
   } catch (err) {
     console.error('Print failed:', err);
