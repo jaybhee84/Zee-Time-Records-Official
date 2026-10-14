@@ -309,7 +309,8 @@ function createPrintWindow(jobId, paperSize = 'A4') {
     const { windowWidth, windowHeight } = resolvePaperSize(paperSize);
 
     const printWin = new BrowserWindow({
-      show: true,
+      // Rendered off-screen only; it still paints and signals readiness while hidden.
+      show: false,
       width: windowWidth,
       height: windowHeight,
       useContentSize: true,
@@ -1331,8 +1332,8 @@ function buildDtrPdfOptions(paperSize = 'A4') {
     printBackground: true,
     pageSize: resolvePaperSize(paperSize).pdfPageSize,
     landscape: false,
-    // VDI report margin: 168 twips / 1440 twips per inch.
-    margins: { top: 168 / 1440, bottom: 168 / 1440, left: 168 / 1440, right: 168 / 1440 },
+    // Zero margins: the page CSS carries the VDI offset, same as direct printing.
+    margins: { top: 0, bottom: 0, left: 0, right: 0 },
   };
 }
 
@@ -1418,60 +1419,50 @@ ipcMain.handle('get-printers', async () => {
   }
 });
 
-function printPdfFile(pdfPath, deviceName, paperSize = 'A4', printSettings = {}) {
+// "1-3,5" -> [{from:0,to:2},{from:4,to:4}] (Electron page ranges are 0-based).
+function parsePageRanges(pages) {
+  if (!pages || !String(pages).trim()) return undefined;
+  return String(pages).split(',').map((part) => {
+    const [from, to = from] = part.trim().split('-').map(Number);
+    return { from: from - 1, to: to - 1 };
+  });
+}
+
+// Prints straight to the Windows printer (GDI), the same route VDI's Crystal
+// Reports engine uses, instead of re-placing a PDF through SumatraPDF.
+// Zero print margins: the page's own CSS carries VDI's 168-twip offset.
+function printDirect(wc, deviceName, paperSize = 'A4', printSettings = {}) {
   return new Promise((resolve, reject) => {
-    const { execFile } = require('child_process');
-
-    if (process.platform === 'win32') {
-      const { print } = require('pdf-to-printer');
-      // Preserve the PDF layout unless the user explicitly requests shrinking.
-      print(pdfPath, {
-        printer: deviceName || undefined,
-        silent: true,
-        scale: printSettings.scale === 'shrink' ? 'shrink' : 'noscale',
-        paperSize: paperSize === 'FOLIO' ? 'folio' : 'A4',
-        copies: Math.max(1, Math.min(99, Number(printSettings.copies) || 1)),
-        pages: printSettings.pages || undefined,
-        monochrome: printSettings.monochrome === true,
-      })
-        .then(resolve)
-        .catch(reject);
-      return;
-    }
-
-    const args = ['-o', `fit-to-page=${printSettings.scale === 'shrink'}`, '-n', String(Math.max(1, Math.min(99, Number(printSettings.copies) || 1)))];
-    if (printSettings.pages) args.push('-o', `page-ranges=${printSettings.pages}`);
-    args.push('-o', paperSize === 'FOLIO' ? 'media=Custom.8.5x13in' : 'media=A4');
-    if (printSettings.monochrome) args.push('-o', 'ColorModel=Gray');
-    if (deviceName) args.push('-d', deviceName);
-    args.push(pdfPath);
-    execFile('lp', args, { timeout: 30000 }, (err) => {
-      if (err) reject(err);
-      else resolve();
+    wc.print({
+      silent: true,
+      printBackground: true,
+      deviceName: deviceName || undefined,
+      pageSize: resolvePaperSize(paperSize).printPageSize,
+      landscape: false,
+      margins: { marginType: 'none' },
+      scaleFactor: printSettings.scale === 'shrink' ? 97 : 100,
+      copies: Math.max(1, Math.min(99, Number(printSettings.copies) || 1)),
+      pageRanges: parsePageRanges(printSettings.pages),
+      color: printSettings.monochrome !== true,
+    }, (success, failureReason) => {
+      if (success) resolve();
+      else reject(new Error(failureReason || 'The printer rejected the job.'));
     });
   });
 }
 
 ipcMain.handle('print-dtr', async (event, payload = {}) => {
   const { employees, year, month, deviceName, paperSize = 'A4', printSettings = {} } = payload;
-  let tmpPath;
   try {
-    const pdfBuffer = await runPrintJob(
+    await runPrintJob(
       { employees, year, month },
-      (wc) => wc.printToPDF(buildDtrPdfOptions(paperSize)),
+      (wc) => printDirect(wc, deviceName, paperSize, printSettings),
       paperSize,
     );
-    tmpPath = path.join(os.tmpdir(), `dtr-print-${Date.now()}.pdf`);
-    fs.writeFileSync(tmpPath, pdfBuffer);
-    await printPdfFile(tmpPath, deviceName, paperSize, printSettings);
     return { success: true };
   } catch (err) {
     console.error('Print failed:', err);
     return { success: false, error: err.message };
-  } finally {
-    if (tmpPath) {
-      fs.unlink(tmpPath, () => {});
-    }
   }
 });
 

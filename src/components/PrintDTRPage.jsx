@@ -274,7 +274,7 @@ export default function PrintDTRPage({ employees = [], punches = [] }) {
       const familyStr = (emp.familyName || "").toUpperCase();
       const firstStr = (emp.firstName || "").toUpperCase();
       const middleStr = emp.middleInitial
-        ? `${emp.middleInitial.toUpperCase()}.`
+        ? `${emp.middleInitial.toUpperCase().replace(/\.$/, "")}.`
         : "";
       const employeeName = `${familyStr}, ${firstStr} ${middleStr}`.trim();
       const schedule = getScheduleForEmployee(emp);
@@ -1228,7 +1228,7 @@ export default function PrintDTRPage({ employees = [], punches = [] }) {
             const familyStr = (emp.familyName || "").toUpperCase();
             const firstStr = (emp.firstName || "").toUpperCase();
             const middleStr = emp.middleInitial
-              ? `${emp.middleInitial.toUpperCase()}.`
+              ? `${emp.middleInitial.toUpperCase().replace(/\.$/, "")}.`
               : "";
             const empName = `${familyStr}, ${firstStr} ${middleStr}`.trim();
 

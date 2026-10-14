@@ -9,7 +9,8 @@
   --col-hour: 9.397163%;
   --col-minutes: 11.524822%;
 }
-@page { margin: 2.963333mm; size: auto; }
+/* No page margin: print/PDF use zero margins and .print-render-window pads each page. */
+@page { size: auto; }
 .cs48-card {
   position: relative;
   width: 99.483333mm;
@@ -63,8 +64,40 @@
 .cs48-screen-wrapper { width: 99.483333mm; }
 .cs48-employee-block { padding: 0; margin: 0; break-after: page; page-break-after: always; }
 .cs48-employee-block:last-child { break-after: auto; page-break-after: auto; }
+/* VDI report margin (168 twips) on every printed page, measured from the paper edge.
+   The print/PDF calls in electron/main.js use zero margins so this is the only offset. */
+.print-render-window .cs48-employee-block { padding: 2.963333mm 0 0 2.963333mm; box-sizing: border-box; }
 @media print {
   html, body { margin: 0 !important; padding: 0 !important; background: white !important; }
   .print-render-window { margin: 0; padding: 0; }
   .cs48-double-page { break-inside: avoid; }
 }
+/* Offsets below are the remaining Form2 BIR objects, in twips / 56.692913 = mm. */
+.cs48-form-num { position: relative; top: 0.264583mm; }
+/* Name stays centred on VDI's field centre (2760 twips) however long it is. */
+.cs48-emp-name > span { position: absolute; left: 46.531mm; transform: translateX(-50%); white-space: nowrap; }
+/* VDI's employee copy is its own set of objects: 5670 twips wide (5730-11400),
+   different column lines, and header text sitting 30 twips further right. */
+.cs48-card--employee {
+  width: 100.0125mm;
+  flex-basis: 100.0125mm;
+  --col-day: 16.402116%;
+  --col-am-arrival: 13.756614%;
+  --col-am-departure: 16.225750%;
+  --col-pm-arrival: 16.931217%;
+  --col-pm-departure: 15.520282%;
+  --col-hour: 9.523810%;
+  --col-minutes: 11.640212%;
+}
+.cs48-card--employee .cs48-header-top { left: 2.645833mm; }
+.cs48-card--employee .cs48-title { left: 2.645833mm; }
+.cs48-card--employee .cs48-emp-name { left: 3.175mm; }
+.cs48-card--employee .cs48-emp-name > span { left: 46.037mm; }
+.cs48-card--employee .cs48-month-row { left: 2.469444mm; }
+.cs48-card--employee .cs48-meta-table { left: 0.529167mm; }
+.cs48-card--employee .cs48-sig-line,
+.cs48-card--employee .cs48-verified-text + .cs48-sig-line { left: 6.879167mm; }
+/* Official Time schedule: the free space between "Official hours…" and "Regular days",
+   one session per line on the Regular days / Saturdays rows. */
+.cs48-official-hours { position: absolute; left: 33.866667mm; width: 19.05mm; top: 0; text-align: center; font-weight: normal; white-space: nowrap; }
+.cs48-official-hours > div { height: 4.233333mm; }

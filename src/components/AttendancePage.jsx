@@ -341,7 +341,7 @@ export default function AttendancePage({
   const employeeName = selectedEmployee
     ? `${selectedEmployee.familyName}, ${selectedEmployee.firstName} ${
         selectedEmployee.middleInitial
-          ? selectedEmployee.middleInitial + "."
+          ? `${selectedEmployee.middleInitial.replace(/\.$/, "")}.`
           : ""
       }`
     : selectedRegistry;
