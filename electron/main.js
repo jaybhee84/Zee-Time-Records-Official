@@ -528,8 +528,10 @@ async function initDatabase() {
   saveDbToDisk();
 }
 
-function createWindow() {
+function createWindow(startupWindow = null) {
   mainWindow = new BrowserWindow({
+    show: false,
+    backgroundColor: '#f8fafc',
     width: 1200,
     height: 800,
     icon: path.join(__dirname, '../src/assets/ZeeTimeRecords.ico'),
@@ -541,6 +543,10 @@ function createWindow() {
     },
   });
 
+  mainWindow.once('ready-to-show', () => {
+    mainWindow.show();
+    if (startupWindow && !startupWindow.isDestroyed()) startupWindow.close();
+  });
   loadAppInto(mainWindow);
 }
 
@@ -548,8 +554,33 @@ app.whenReady().then(async () => {
   if (process.platform === 'win32') {
     app.setAppUserModelId('com.jaybhee.zkteco-dtr');
   }
-  await initDatabase();
-  createWindow();
+  const startupWindow = new BrowserWindow({
+    width: 460,
+    height: 380,
+    frame: false,
+    resizable: false,
+    show: false,
+    backgroundColor: '#f8fafc',
+    icon: path.join(__dirname, '../src/assets/ZeeTimeRecords.ico'),
+    webPreferences: { contextIsolation: true, nodeIntegration: false },
+  });
+  const startupVisible = new Promise(resolve => {
+    startupWindow.once('ready-to-show', () => {
+      startupWindow.show();
+      resolve();
+    });
+  });
+  await startupWindow.loadFile(path.join(__dirname, 'startup.html'));
+  await startupVisible;
+  try {
+    await initDatabase();
+  } catch (error) {
+    dialog.showErrorBox('Unable to start Zee Time Records', `Could not load the database.\n${error.message}`);
+    startupWindow.close();
+    app.quit();
+    return;
+  }
+  createWindow(startupWindow);
   createApplicationMenu();
   configureAutoUpdater();
   scheduleAutomaticUpdateCheck(AUTO_UPDATE_START_DELAY_MS);

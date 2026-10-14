@@ -33,6 +33,24 @@ test('failed repair rolls back', async () => {
   assert.equal(db.exec('SELECT timestamp FROM punches')[0].values[0][0], p.timestamp);
   db.close();
 });
+test('print shift-left option fills incomplete device days without changing undertime or input', async () => {
+  process.env.TZ = 'Asia/Manila';
+  const code = fs.readFileSync(require.resolve('../src/utils/dtrCalculator.js'), 'utf8');
+  const { buildMonthlyDTR } = await import(`data:text/javascript;base64,${Buffer.from(code).toString('base64')}`);
+  const punches = ['17:21:31', '13:00:00'].map(time => ({ timestamp: `2026-09-24 ${time}`, source: null }));
+  const original = JSON.stringify(punches);
+  const schedule = { amIn: '08:00', amOut: '12:00', pmIn: '13:00', pmOut: '17:00', graceMinutes: 0 };
+  const normal = buildMonthlyDTR(punches, 2026, 9, 12, schedule)[23];
+  const shifted = buildMonthlyDTR(punches, 2026, 9, 12, schedule, true)[23];
+  const columns = row => ['amArrival', 'amDeparture', 'pmArrival', 'pmDeparture'].map(key => row[key]);
+  assert.deepEqual(columns(shifted), ['01:00 PM', '05:21 PM', '', '']);
+  assert.equal(shifted.undertimeHours, normal.undertimeHours);
+  assert.equal(shifted.undertimeMinutes, normal.undertimeMinutes);
+  assert.deepEqual(columns(buildMonthlyDTR([punches[0]], 2026, 9, 12, null, true)[23]), ['05:21 PM', '', '', '']);
+  assert.deepEqual(columns(buildMonthlyDTR([], 2026, 9, 12, null, true)[23]), ['', '', '', '']);
+  assert.equal(JSON.stringify(punches), original);
+});
+
 test('Vinea incomplete days use chronological columns; device rules are unchanged', async () => {
   process.env.TZ = 'Asia/Manila';
   const code = fs.readFileSync(require.resolve('../src/utils/dtrCalculator.js'), 'utf8');

@@ -214,9 +214,10 @@ function assignSlots(taps) {
  * @param {number} noonStartHour - kept for API compatibility, not used in slot logic
  * @param {Object|null} schedule - optional Official Time schedule
  *   ({ amIn, amOut, pmIn, pmOut, graceMinutes } in 24-hour "HH:MM")
+ * @param {boolean} leftAlignEntries - display punches chronologically from the first column
  * @returns {Array} one row per calendar day of the month
  */
-export function buildMonthlyDTR(punches, year, month, noonStartHour = 12, schedule = null) {
+export function buildMonthlyDTR(punches, year, month, noonStartHour = 12, schedule = null, leftAlignEntries = false) {
   const daysInMonth = new Date(year, month, 0).getDate();
 
   // Tracks how many days this month have already used the AM grace-period
@@ -263,6 +264,14 @@ export function buildMonthlyDTR(punches, year, month, noonStartHour = 12, schedu
         row.undertimeHours = String(Math.floor(totalMinutes / 60));
         row.undertimeMinutes = String(totalMinutes % 60);
       }
+    }
+
+    // This print option only changes the displayed columns. Keep undertime
+    // based on the original slots so an afternoon punch remains afternoon work.
+    if (leftAlignEntries) {
+      ['amArrival', 'amDeparture', 'pmArrival', 'pmDeparture'].forEach((slot, index) => {
+        row[slot] = taps[index] ? formatTime(taps[index].datetime) : '';
+      });
     }
 
     rows.push(row);
