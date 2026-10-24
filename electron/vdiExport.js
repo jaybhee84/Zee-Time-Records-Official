@@ -49,8 +49,16 @@ function readBase(reader) {
         Dev: row.Dev ?? '',
       })),
     departments: rows('Department').map((row) => String(row.DepartmentName ?? '').trim()).filter(Boolean),
+    schedules: [...new Set(rows('ScheduleSetup').map((row) => String(row.ScheduleCode ?? '').trim()).filter(Boolean))],
   };
 }
+
+// Same teaching groups as src/utils/employeeGroups.js.
+const TEACHING_SUBGROUPS = ['kinder', 'grade 1', 'grade 2', 'grade 3', 'grade 4', 'grade 5', 'grade 6', 'sned', 'sped', 'departmental', 'subject teacher', 'alive', 'substitute teacher'];
+const isTeachingSubgroup = (subGroup) => {
+  const value = String(subGroup ?? '').trim().toLowerCase();
+  return TEACHING_SUBGROUPS.includes(value) || value.startsWith('subject teacher') || value.startsWith('substitute teacher');
+};
 
 const mostCommon = (values) => {
   const counts = new Map();
@@ -68,7 +76,16 @@ function planVdiExport({ employees = [], punches = [], base }) {
   const baseById = new Map(base.employees.map((emp) => [normalizeIdentifier(emp.EmployeeID), emp]));
   const departments = [...base.departments];
   const newDepartments = [];
-  const fallbackSchedule = mostCommon(base.employees.map((emp) => emp.ScheduleCode));
+  // VDI requires a schedule group on every employee. Prefer what colleagues in
+  // the same department use, then VDI's TEACHING / NON-TEACHING schedules.
+  const schedules = base.schedules || [];
+  const fallbackSchedule = mostCommon(base.employees.map((emp) => emp.ScheduleCode)) || schedules[0] || '';
+  const scheduleFor = (department, subGroup) => {
+    const peers = mostCommon(base.employees.filter((other) => sameText(other.Department, department)).map((other) => other.ScheduleCode));
+    if (peers) return peers;
+    const wanted = isTeachingSubgroup(subGroup) ? 'TEACHING' : 'NON-TEACHING';
+    return schedules.find((code) => sameText(code, wanted)) || fallbackSchedule;
+  };
 
   const resolveDepartment = (emp) => {
     const subGroup = String(emp.subGroup ?? '').trim();
@@ -116,9 +133,7 @@ function planVdiExport({ employees = [], punches = [], base }) {
       if (Object.keys(row).some((key) => String(row[key] ?? '') !== String(existing[key] ?? '').trim())) updates.push(row);
     } else {
       row.Department = resolveDepartment(emp);
-      row.ScheduleCode =
-        mostCommon(base.employees.filter((other) => sameText(other.Department, row.Department)).map((other) => other.ScheduleCode)) ||
-        fallbackSchedule;
+      row.ScheduleCode = scheduleFor(row.Department, emp.subGroup);
       inserts.push(row);
       baseById.set(normalizeIdentifier(id), row);
     }
@@ -424,9 +439,58 @@ function runJet(workDir, mdbPath, outPath) {
   });
 }
 
+const delay = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+// Replaces outPath with data. The zip is written beside the target first and
+// then renamed over it, so an existing backup is overwritten in one step and
+// is never left half-written. A read-only flag on the old file is cleared,
+// and short-lived locks (OneDrive, antivirus scanners) are retried.
+async function writeFileReplacing(outPath, data) {
+  const dir = path.dirname(outPath);
+  fs.mkdirSync(dir, { recursive: true });
+  const existing = fs.statSync(outPath, { throwIfNoEntry: false });
+  if (existing?.isDirectory()) throw new Error(`"${outPath}" is a folder. Choose a file name for the backup.`);
+
+  const tempPath = path.join(dir, `.${path.basename(outPath)}.${process.pid}.${Date.now()}.tmp`);
+  try {
+    fs.writeFileSync(tempPath, data);
+  } catch (err) {
+    throw new Error(`Could not write to "${dir}" (${err.code || err.message}). Choose a folder you can save to, such as Desktop or Documents.`);
+  }
+  try {
+    for (let attempt = 0; ; attempt++) {
+      try {
+        if (existing) {
+          try { fs.chmodSync(outPath, 0o666); } catch (err) { if (err.code !== 'ENOENT') throw err; }
+        }
+        fs.renameSync(tempPath, outPath);
+        return Boolean(existing);
+      } catch (err) {
+        if (!['EBUSY', 'EPERM', 'EACCES'].includes(err.code) || attempt >= 5) {
+          // A program holding the old zip open (a viewer, Explorer preview)
+          // blocks the rename but may still allow writing over its contents.
+          if (existing && err.code !== 'ENOENT') {
+            try {
+              fs.copyFileSync(tempPath, outPath);
+              return true;
+            } catch { /* report the original lock below */ }
+          }
+          throw new Error(err.code === 'EBUSY' || err.code === 'EPERM' || err.code === 'EACCES'
+            ? `"${path.basename(outPath)}" could not be replaced because it is open or locked by another program. Close it (or VDI) and export again.`
+            : err.message);
+        }
+        await delay(300 * (attempt + 1));
+      }
+    }
+  } finally {
+    fs.rmSync(tempPath, { force: true });
+  }
+}
+
 /**
  * Builds a VDI BioOffice backup from the bundled template (or an explicit
  * basePath, never modified) with this app's employees and attendance.
+ * An existing file at outPath is overwritten.
  */
 async function exportVdiBackup({ basePath = VDI_TEMPLATE_PATH, outPath, employees, punches, MDBReader }) {
   if (process.platform !== 'win32') throw new Error('Exporting a VDI backup is only available on Windows.');
@@ -445,8 +509,18 @@ async function exportVdiBackup({ basePath = VDI_TEMPLATE_PATH, outPath, employee
       throw new Error(`Only ${written} of ${plan.dtr.length} attendance records were written. Nothing was exported.`);
     }
     const mdb = fs.readFileSync(compactedPath);
-    fs.writeFileSync(outPath, createZip(VDI_DB_NAME, mdb));
-    return plan.stats;
+    // Check the finished database before it replaces anything on disk.
+    const saved = new MDBReader(mdb);
+    const savedRows = saved.getTableNames().includes('DTR') ? saved.getTable('DTR').getData({ columns: ['EmployeeID'] }).length : -1;
+    if (savedRows !== plan.dtr.length) {
+      throw new Error(`The generated database holds ${Math.max(savedRows, 0)} of ${plan.dtr.length} attendance records. Nothing was exported.`);
+    }
+    const zip = createZip(VDI_DB_NAME, mdb);
+    if (!readZipEntry(zip, (name) => name === VDI_DB_NAME)?.equals(mdb)) {
+      throw new Error('The backup zip could not be verified. Nothing was exported.');
+    }
+    const replaced = await writeFileReplacing(outPath, zip);
+    return { ...plan.stats, replaced };
   } finally {
     fs.rmSync(workDir, { recursive: true, force: true });
   }

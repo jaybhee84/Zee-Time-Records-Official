@@ -100,10 +100,29 @@ export default function App() {
   }, [currentUser, loadAttempt]);
 
   // Safe auto-save: skip initial mount to prevent overwriting existing DB with defaults
+  const [saveError, setSaveError] = useState(null);
+  const [saveAttempt, setSaveAttempt] = useState(0);
   useEffect(() => {
     if (!currentUser || loading || loadError || isInitialMount.current) return;
-    window.dtrApi?.saveEmployees(employees);
-  }, [employees, currentUser, loading, loadError]);
+    let cancelled = false;
+    Promise.resolve(window.dtrApi?.saveEmployees(employees))
+      .then((ok) => {
+        if (cancelled) return;
+        setSaveError(
+          ok === false
+            ? "Employee changes could not be saved to the database."
+            : null,
+        );
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        console.error("Failed to save employees:", err);
+        setSaveError("Employee changes could not be saved to the database.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [employees, currentUser, loading, loadError, saveAttempt]);
 
   const handleLoginSuccess = (username) => {
     setLoading(true);
@@ -119,6 +138,7 @@ export default function App() {
     setWelcomeMessage(null);
     setTutorialMode(null);
     setLoadError(null);
+    setSaveError(null);
     isInitialMount.current = true;
   };
 
@@ -153,7 +173,9 @@ export default function App() {
         onLogout={handleLogout}
       />
 
-      <main className="main-content">
+      <main
+        className={`main-content${activeTab === "employees" && !loadError ? " main-content--fluid" : ""}`}
+      >
         {loadError ? (
           <div className="error-banner">
             <AlertTriangle size={20} />
@@ -165,6 +187,18 @@ export default function App() {
           </div>
         ) : (
           <>
+            {saveError && (
+              <div className="error-banner">
+                <AlertTriangle size={20} />
+                <span>{saveError}</span>
+                <button
+                  type="button"
+                  onClick={() => setSaveAttempt((attempt) => attempt + 1)}
+                >
+                  Retry
+                </button>
+              </div>
+            )}
             {activeTab === "employees" && (
               <EmployeesPage
                 employees={employees}

@@ -2,11 +2,9 @@ import React, { useState, useEffect, useMemo } from "react";
 import { parseAttlog } from "../utils/parseAttlog.js";
 import { parseUserDat, base64ToText } from "../utils/parseDeviceFiles.js";
 import {
-  buildMonthlyDTR,
   groupByPin,
   normalizePin,
 } from "../utils/dtrCalculator.js";
-import DTRView from "./DTRView.jsx";
 import {
   Usb,
   RefreshCw,
@@ -20,8 +18,6 @@ import {
   Unlink,
   Search,
 } from "lucide-react";
-
-const now = new Date();
 
 function toTimestampString(date) {
   const pad = (n) => String(n).padStart(2, "0");
@@ -53,12 +49,6 @@ export default function AttendancePage({
   // Attendance Import State
   const [importStatus, setImportStatus] = useState(null);
   const [saving, setSaving] = useState(false);
-
-  // Selection & Preview State
-  const [selectedRegistry, setSelectedRegistry] = useState("");
-  const [year, setYear] = useState(now.getFullYear());
-  const [month, setMonth] = useState(now.getMonth() + 1);
-  const [officeName, setOfficeName] = useState("");
 
   const byPin = useMemo(() => groupByPin(punches || []), [punches]);
 
@@ -329,31 +319,6 @@ export default function AttendancePage({
       setSaving(false);
     }
   };
-
-  const selectedEmployee = employees.find(
-    (e) => e.registryNumber === selectedRegistry,
-  );
-
-  const devicePin = selectedEmployee
-    ? selectedEmployee.staffNoOnDev || selectedEmployee.registryNumber
-    : selectedRegistry;
-
-  const employeeName = selectedEmployee
-    ? `${selectedEmployee.familyName}, ${selectedEmployee.firstName} ${
-        selectedEmployee.middleInitial
-          ? `${selectedEmployee.middleInitial.replace(/\.$/, "")}.`
-          : ""
-      }`
-    : selectedRegistry;
-
-  const dtrRows = useMemo(() => {
-    if (!selectedRegistry || !devicePin) return [];
-    const normDevPin = normalizePin(devicePin);
-    const matchedPunches = (punches || []).filter(
-      (p) => normalizePin(p.pin || p.staffNoOnDev) === normDevPin,
-    );
-    return buildMonthlyDTR(matchedPunches, year, month);
-  }, [punches, selectedRegistry, devicePin, year, month]);
 
   return (
     <div className="page">
@@ -671,73 +636,6 @@ export default function AttendancePage({
           </div>
         )}
       </section>
-
-      {/* STEP 4: EMPLOYEE DTR PREVIEW */}
-      <section className="panel">
-        <h3>4. Select Employee & Period</h3>
-        <div
-          className="select-row"
-          style={{ display: "flex", gap: "10px", flexWrap: "wrap" }}
-        >
-          <select
-            value={selectedRegistry}
-            onChange={(e) => setSelectedRegistry(e.target.value)}
-          >
-            <option value="">-- Select Employee --</option>
-            {employees.map((emp) => {
-              const isBound = emp.fprintAssigned;
-              const devPin = emp.staffNoOnDev || emp.registryNumber;
-              return (
-                <option key={emp.registryNumber} value={emp.registryNumber}>
-                  {isBound ? "✓ [Linked]" : "✗ [Unlinked]"} {emp.familyName},{" "}
-                  {emp.firstName} (Device ID: {devPin})
-                </option>
-              );
-            })}
-          </select>
-
-          <select
-            value={month}
-            onChange={(e) => setMonth(Number(e.target.value))}
-          >
-            {Array.from({ length: 12 }, (_, i) => (
-              <option key={i + 1} value={i + 1}>
-                {new Date(2000, i, 1).toLocaleString("en-US", {
-                  month: "long",
-                })}
-              </option>
-            ))}
-          </select>
-
-          <input
-            type="number"
-            value={year}
-            onChange={(e) => setYear(Number(e.target.value))}
-            style={{ width: "90px" }}
-          />
-
-          <input
-            placeholder="Office / School name (optional)"
-            value={officeName}
-            onChange={(e) => setOfficeName(e.target.value)}
-          />
-        </div>
-      </section>
-
-      {selectedRegistry && (
-        <section className="panel">
-          <h3>5. DTR Preview</h3>
-          <div className="dtr-preview">
-            <DTRView
-              employeeName={employeeName}
-              year={year}
-              month={month}
-              rows={dtrRows}
-              officeName={officeName}
-            />
-          </div>
-        </section>
-      )}
     </div>
   );
 }

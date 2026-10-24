@@ -407,6 +407,9 @@ function runQuery(sql, params = []) {
   saveDbToDisk();
 }
 
+// Personnel names are kept in capitals, as on DTRs and in VDI.
+const upperName = (value) => String(value ?? '').trim().toUpperCase();
+
 async function initDatabase() {
   const SQL = await initSqlJs({
     locateFile: (file) =>
@@ -516,6 +519,15 @@ async function initDatabase() {
           )
         )
     `);
+  }
+
+  // Names imported before capitals were enforced (e.g. "Cariaga, Jennifer").
+  const mixedCaseNames = getAll('SELECT registryNumber, familyName, firstName, middleInitial FROM employees')
+    .filter((emp) => ['familyName', 'firstName', 'middleInitial'].some((key) => (emp[key] ?? '') !== upperName(emp[key])));
+  for (const emp of mixedCaseNames) {
+    db.run('UPDATE employees SET familyName = ?, firstName = ?, middleInitial = ? WHERE registryNumber = ?', [
+      upperName(emp.familyName), upperName(emp.firstName), upperName(emp.middleInitial), emp.registryNumber,
+    ]);
   }
 
   db.run(`
@@ -866,9 +878,9 @@ ipcMain.handle('import-vinea-employees', async () => {
       employees.push({
         registryNumber,
         staffNoOnDev: String(row.StaffNumber || '').trim() || registryNumber,
-        familyName: String(row.Lastname || '').trim(),
-        firstName: String(row.Firstname || '').trim(),
-        middleInitial: String(row.Middlename || '').trim(),
+        familyName: upperName(row.Lastname),
+        firstName: upperName(row.Firstname),
+        middleInitial: upperName(row.Middlename),
         sourceGroup: rawDept,
         subGroup,
       });
@@ -914,6 +926,7 @@ ipcMain.handle('export-vdi-backup', async () => {
       ],
     });
     if (saveResult.canceled || !saveResult.filePath) return { canceled: true };
+    // Always a .zip; an existing file with the same name is overwritten.
     if (!/\.zip$/i.test(saveResult.filePath)) saveResult.filePath += '.zip';
     if (path.resolve(saveResult.filePath).toLowerCase() === path.resolve(basePath).toLowerCase()) {
       return { success: false, error: 'Choose a different file name - the export cannot overwrite the VDI database it is built from.' };
@@ -1126,9 +1139,9 @@ ipcMain.handle('save-employees', async (event, employees) => {
         emp.registryNumber,
         emp.staffNoOnDev || emp.registryNumber,
         emp.fprintAssigned ? 1 : 0,
-        emp.familyName || '',
-        emp.firstName || '',
-        emp.middleInitial || '',
+        upperName(emp.familyName),
+        upperName(emp.firstName),
+        upperName(emp.middleInitial),
         emp.subGroup || '',
         emp.sourceGroup || '',
       ]);

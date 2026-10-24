@@ -285,7 +285,7 @@ export default function BackupView({ employees = [], setEmployees }) {
 
       setStatus({
         type: "success",
-        msg: `VDI backup saved to ${res.filePath} with ${res.records} attendance record(s).${
+        msg: `VDI backup ${res.replaced ? "saved (replaced the existing file)" : "saved"} to ${res.filePath} with ${res.records} attendance record(s).${
           notes.length ? " " + notes.join("; ") + "." : ""
         } Restore it in VDI to apply.`,
       });

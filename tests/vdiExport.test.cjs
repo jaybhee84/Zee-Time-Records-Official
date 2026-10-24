@@ -108,3 +108,30 @@ test('export preserves blank middle names for VDI report concatenation, includin
     fs.rmSync(work, { recursive: true, force: true });
   }
 });
+
+test('export overwrites an existing backup, including a read-only one', { skip: process.platform !== 'win32' }, async () => {
+  const MDBReader = (await import('mdb-reader')).default;
+  const work = fs.mkdtempSync(path.join(os.tmpdir(), 'zee-vdi-overwrite-test-'));
+  try {
+    const outPath = path.join(work, '10 24 26.zip');
+    fs.writeFileSync(outPath, 'old backup');
+    fs.chmodSync(outPath, 0o444);
+    const employees = [employee('101', { familyName: 'CRUZ', firstName: 'ANA' })];
+    const stats = await exportVdiBackup({ outPath, employees, punches: [punch('101', '2026-09-03 07:00:00')], MDBReader });
+    assert.equal(stats.replaced, true);
+    const reader = new MDBReader(readZipEntry(fs.readFileSync(outPath), name => name === 'MSEEDBioOfficedb.mdb'));
+    assert.equal(reader.getTable('DTR').getData().length, 1);
+    assert.deepEqual(fs.readdirSync(work), ['10 24 26.zip']);
+  } finally {
+    fs.rmSync(work, { recursive: true, force: true });
+  }
+});
+
+test('employees exported into the empty template get a VDI schedule group', () => {
+  const plan = planVdiExport({
+    base: { employees: [], departments: ['ADMIN', 'GRADE 1 TCHR.'], schedules: ['NON-TEACHING', 'TEACHING'], dtr: [] },
+    employees: [employee('101', { subGroup: 'Grade 1' }), employee('102', { subGroup: 'Admin' }), employee('103', { subGroup: 'Job Order' })],
+    punches: [],
+  });
+  assert.deepEqual(plan.inserts.map((e) => [e.EmployeeID, e.ScheduleCode]), [['101', 'TEACHING'], ['102', 'NON-TEACHING'], ['103', 'NON-TEACHING']]);
+});
