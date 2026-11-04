@@ -20,10 +20,24 @@ test('USB import preserves employee dates, imports complete missing days, and is
       '2026-09-02 17:00:00', '2026-08-31 17:00:00',
     ].map(timestamp => ({ timestamp })),
   };
-  assert.deepEqual(importMissingDays(db, params), { success: true, inserted: 4, skipped: 4 });
+  // 09-01 and 08-31 hold punches the device lacks -> preserved; 09-02 is new.
+  assert.deepEqual(importMissingDays(db, params),
+    { success: true, inserted: 4, skipped: 4, updatedDays: 0, preservedDays: 2 });
   assert.deepEqual(db.exec('SELECT * FROM punches WHERE id <= 3 ORDER BY id')[0].values, original);
-  assert.deepEqual(importMissingDays(db, params), { success: true, inserted: 0, skipped: 8 });
+  assert.deepEqual(importMissingDays(db, params),
+    { success: true, inserted: 0, skipped: 8, updatedDays: 0, preservedDays: 2 });
   assert.equal(db.exec('SELECT COUNT(*) FROM punches')[0].values[0][0], 7);
+  db.close();
+});
+
+test('DTR-saved punches (HH:MM:00) match device punches by minute', async () => {
+  const SQL = await initSqlJs();
+  const db = new SQL.Database();
+  db.run('CREATE TABLE punches (id INTEGER PRIMARY KEY, pin TEXT, staffNoOnDev TEXT, timestamp TEXT, rawTime TEXT)');
+  db.run("INSERT INTO punches VALUES (1, '7', '7', '2026-09-03 07:45:00', '07:45 AM')");
+  const params = { pin: '7', newPunches: [{ timestamp: '2026-09-03 07:45:31' }, { timestamp: '2026-09-03 17:02:10' }] };
+  assert.deepEqual(importMissingDays(db, params),
+    { success: true, inserted: 1, skipped: 1, updatedDays: 1, preservedDays: 0 });
   db.close();
 });
 

@@ -258,6 +258,8 @@ export default function AttendancePage({
       const boundEmployees = employees.filter((e) => e.fprintAssigned);
       let totalSavedPunches = 0;
       let totalSkippedPunches = 0;
+      let totalUpdatedDays = 0;
+      let totalPreservedDays = 0;
       let matchedEmpCount = 0;
 
       for (const emp of boundEmployees) {
@@ -299,6 +301,8 @@ export default function AttendancePage({
           }
           totalSavedPunches += saved.inserted;
           totalSkippedPunches += saved.skipped;
+          totalUpdatedDays += saved.updatedDays || 0;
+          totalPreservedDays += saved.preservedDays || 0;
         }
       }
 
@@ -307,7 +311,7 @@ export default function AttendancePage({
 
       setImportStatus({
         type: totalSavedPunches > 0 ? "success" : "warning",
-        message: `Processed ${parsedLogs.length} raw logs for ${matchedEmpCount} linked employee(s). Added ${totalSavedPunches} punches on missing dates. Skipped ${totalSkippedPunches} punches on dates with existing attendance or duplicate entries. Existing attendance was preserved.`,
+        message: `Processed ${parsedLogs.length} raw logs for ${matchedEmpCount} linked employee(s). Added ${totalSavedPunches} new punch(es)${totalUpdatedDays > 0 ? `, including updates to ${totalUpdatedDays} day(s) that had new device punches` : ""}. Skipped ${totalSkippedPunches} already-saved punch(es).${totalPreservedDays > 0 ? ` Kept ${totalPreservedDays} manually edited day(s) unchanged.` : ""}`,
       });
     } catch (err) {
       console.error("Attendance Download Error:", err);
