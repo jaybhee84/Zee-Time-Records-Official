@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { X } from "lucide-react";
+import { X, Link2, Unlink } from "lucide-react";
 import {
   TEACHING_SUBGROUPS,
   NON_TEACHING_SUBGROUPS,
@@ -54,7 +54,9 @@ export default function EmployeeFormModal({
   });
 
   const [error, setError] = useState("");
+  const [unlinkBio, setUnlinkBio] = useState(false);
   const isEditing = Boolean(initial);
+  const isLinked = Boolean(initial?.fprintAssigned);
 
   // Name fields list for targeting uppercase conversion
   const nameFields = ["familyName", "firstName", "middleInitial"];
@@ -135,6 +137,11 @@ export default function EmployeeFormModal({
       firstName: form.firstName.trim().toUpperCase(),
       middleInitial: form.middleInitial.trim().toUpperCase(),
       subGroup: form.subGroup.trim(),
+      // Same reset as "Unassign" on the Attendance page.
+      ...(unlinkBio && {
+        fprintAssigned: false,
+        staffNoOnDev: form.registryNumber.trim(),
+      }),
     });
   };
 
@@ -182,6 +189,36 @@ export default function EmployeeFormModal({
               their punches to their record.
             </span>
           </label>
+
+          {isLinked && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                gap: "10px",
+                marginTop: "12px",
+                padding: "8px 12px",
+                border: "1px solid #e5e7eb",
+                borderRadius: "8px",
+                fontSize: "0.85rem",
+                color: unlinkBio ? "#b45309" : "#374151",
+              }}
+            >
+              {unlinkBio ? <Unlink size={16} /> : <Link2 size={16} />}
+              <span style={{ flex: 1 }}>
+                {unlinkBio
+                  ? "Will be unlinked from the biometric device when you save."
+                  : `Linked to biometric/USB device ID ${initial.staffNoOnDev}.`}
+              </span>
+              <button
+                type="button"
+                className="secondary"
+                onClick={() => setUnlinkBio((v) => !v)}
+              >
+                {unlinkBio ? "Undo" : "Unlink"}
+              </button>
+            </div>
+          )}
 
           {/* Responsive Name Row */}
           <div
